@@ -6,7 +6,7 @@ ct - Company Time
 Workflow
 --------
 
-To start tracking time, type `ct init` and respond to the prompts. This will create a git repository in the current directory and set up a config file.
+To start tracking time, make a git repository and type `ct init` at the repository root.
 
 When you begin working, type `ct clockin [project_name]`. When you are done, type `ct clockout`. To change projects, type `ct clockin [new_project]`.
 
