@@ -22,6 +22,9 @@ def sanitize(name):
     name.replace('\n', '_')
     return name
 
+def parse_date_from_file(date_string):
+    return datetime.datetime.strptime(date_string, file_date_format)
+
 def load_config():
     """Load or create the config file"""
     if not os.path.exists(config_file_name):
@@ -41,6 +44,10 @@ def file_for_current_user(mode='r'):
         return None
     else:
         return open(path, mode)
+
+def all_files(mode='r'):
+    paths = (path for path in os.listdir('.') if path.endswith('.txt'))
+    return [open(path, mode) for path in paths]
 
 def log(line):
     """Write a line to the current user's file"""
@@ -140,7 +147,7 @@ def clockout(args=None):
 def tally(args):
     parser = argparse.ArgumentParser(prog='ct tally',
                                      description='Count hours spent on a project')
-    parser.add_argument('project', type=str, action='store',  nargs='+')
+    parser.add_argument('project', type=str, action='store',  nargs='*')
     parser.add_argument('-m', '--more_projects', type=str, action='store', nargs='+',
                         default=[])
     parser.add_argument('-f', dest='tfrom', type=str, action='store', default=None,
@@ -150,7 +157,12 @@ def tally(args):
     
     args = parser.parse_args(args)
     proj = ' '.join(args.project)
-    projects = [proj] + args.more_projects
+    if proj:
+        projects = [proj] + args.more_projects
+    else:
+        projects = args.more_projects
+    if not projects:
+        projects = None
     
     now = datetime.datetime.now()
     from_time = parse_date(args.tfrom) if args.tfrom else None
@@ -163,20 +175,20 @@ def tally(args):
     
     total_time = datetime.timedelta()
     
-    paths = (path for path in os.listdir('.') if path.endswith('.txt'))
+    files = all_files('r')
     
-    for path in paths:
-        with open(path, 'r') as f:
+    for file in files:
+        with file as f:
             lines = f.readlines()
         i = 0
         while i < len(lines)-1: # Don't count non-clocked-out sessions
             line = lines[i].strip()
             this_proj, clockin_string = line.split(' clockin ')
-            if this_proj in projects:
-                clockin_time = datetime.datetime.strptime(clockin_string, file_date_format)
+            if this_proj in projects or projects is None:
+                clockin_time = parse_date_from_file(clockin_string)
                 if from_time is None or clockin_time >= from_time:
                     clockout_string = lines[i+1].split('clockout ')[1].strip()
-                    clockout_time = datetime.datetime.strptime(clockout_string, file_date_format)
+                    clockout_time = parse_date_from_file(clockout_string)
                     if clockout_time < to_time:
                         print "%s - %s" % (clockin_string, clockout_string)
                         total_time += clockout_time - clockin_time
