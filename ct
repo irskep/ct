@@ -1,0 +1,49 @@
+#!/usr/local/bin/python
+
+import os
+import sys
+import argparse
+import re
+
+filesystem_legal = re.compile(r'^[^\\/:]+$')
+
+commands = {}
+
+def command(name):
+    def dec(func):
+        commands[name] = func
+    return dec
+
+@command('init')
+def init(args):
+    parser = argparse.ArgumentParser(prog='ct init',
+                                     description='Start tracking time in an empty repository')
+    args = parser.parse_args(args)
+    
+    try:
+        name = raw_input('Your name in filesystem-legal characters:\n')
+        name.replace('/', '_')
+        name.replace('\\', '_')
+        name.replace(':', '_')
+    except EOFError:
+        print 'Keeping old config'
+        return
+    
+    try:
+        os.remove('.ctconfig')
+    except OSError:
+        pass    # Doesn't matter
+    
+    with open('.ctconfig', 'w') as f:
+        f.write('Name: %s\n' % name)
+    
+    print 'Config file created successfully'
+
+if __name__ == '__main__':
+    parser = argparse.ArgumentParser(prog='ct',
+                                     description='Git-based time tracking tool')
+    parser.add_argument('command', type=str, action='store',
+                        choices=commands.keys(),
+                        help='init, clockin, or clockout')
+    args = parser.parse_args(sys.argv[1:2])
+    commands[args.command](sys.argv[2:])
