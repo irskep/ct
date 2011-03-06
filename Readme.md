@@ -24,6 +24,7 @@ Usage: `ct [command]`
     init: Create or replace the config file in the current directory
     clockin [project_name]: Begin tracking hours on a project
     clockout: Stop tracking hours
+    tally [project_name]: Count all hours spent working on a project
 
 Optional Arguments
 ------------------
