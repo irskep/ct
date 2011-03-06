@@ -7,14 +7,9 @@ import sys
 
 config_file_name = '.ctconfig'
 
-commands = {}
-
-def command(name):
-    """Declare a command"""
-    def dec(func):
-        commands[name] = func
-        return func
-    return dec
+# =====================
+# = Utility functions =
+# =====================
 
 def sanitize(name):
     name.replace('/', '_')
@@ -57,6 +52,20 @@ def clocked_in_project():
             return last_line.split(' clockin ')[0]
     else:
         return False
+
+
+# ============
+# = Commands =
+# ============
+
+commands = {}
+
+def command(name):
+    """Declare a command"""
+    def dec(func):
+        commands[name] = func
+        return func
+    return dec
 
 @command('init')
 def init(args=None):
@@ -129,6 +138,7 @@ def clockout(args=None):
                                        clockout_time.strftime('%I:%M %p on %b %d, %Y'))
     
     log('clockout %s\n' % (clockout_time.strftime('%d-%m-%Y %H:%M:%S')))
+
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(prog='ct',
