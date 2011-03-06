@@ -1,7 +1,7 @@
 ct - Company Time
 =================
 
-`ct` is a git-based time tracking tool requiring Python 2.7.
+`ct` is a git-based time tracking tool requiring Python 2.7 and `python-dateutil`.
 
 **Note*: Since I am following readme-driven development, most of this isn't implemented yet.
 
