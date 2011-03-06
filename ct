@@ -89,7 +89,7 @@ def init(args=None):
 def clockin(args):
     parser = argparse.ArgumentParser(prog='ct clockin',
                                      description='Start logging hours to a project')
-    parser.add_argument('project', type=str, action='store')
+    parser.add_argument('project', type=str, action='store',  nargs='+')
     parser.add_argument('-t', '--time', type=str, action='store', default=None,
                         help='Time to log for checkin')
     
@@ -98,14 +98,16 @@ def clockin(args):
     if clocked_in_project():
         clockout()
     
+    proj = ' '.join(args.project)
+    
     if args.time:
         clockin_time = dateutil.parse(args.time)
     else:
         clockin_time = datetime.datetime.now()
     
-    log('%s clockin %s\n' % (args.project, clockin_time.strftime('%d-%m-%Y %H:%M:%S')))
+    log('%s clockin %s\n' % (proj, clockin_time.strftime('%d-%m-%Y %H:%M:%S')))
     
-    print 'Clocked into %s at %s' % (args.project,
+    print 'Clocked into %s at %s' % (proj,
                                      clockin_time.strftime('%I:%M %p on %b %d, %Y'))
 
 @command ('clockout')
