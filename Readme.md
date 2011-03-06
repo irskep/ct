@@ -27,4 +27,4 @@ Usage: `ct [command]`
 Optional Arguments
 ------------------
 
-You can provide a `-t [time string]` argument to `clockin` and `clockout` to use that time instead of the current time.
+You can provide a `-t [time string]` argument to `clockin` and `clockout` to use that time instead of the current time. Add `--help` to any command to get the full usage of that command.
