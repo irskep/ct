@@ -23,7 +23,7 @@ def sanitize(name):
     return name
 
 def parse_date_from_file(date_string):
-    return datetime.datetime.strptime(date_string, file_date_format)
+    return datetime.datetime.strptime(date_string.strip(), file_date_format)
 
 def load_config():
     """Load or create the config file"""
@@ -54,15 +54,16 @@ def log(line):
     with file_for_current_user('a') as f:
         f.write(line)
 
-def clocked_in_project():
+def clocked_in_info():
     """Return True if a user is configured and the last action was a clockin"""
     f = file_for_current_user()
     if f:
         last_line = f.readlines()[-1]
         if 'clockin' in last_line:
-            return last_line.split(' clockin ')[0]
+            project, date_string = last_line.split(' clockin ')
+            return project, parse_date_from_file(date_string)
     else:
-        return False
+        return None, None
 
 
 # ============
@@ -116,7 +117,8 @@ def clockin(args):
     args = parser.parse_args(args)
     proj = ' '.join(args.project)
     
-    if clocked_in_project():
+    project, clockin_time = clocked_in_info()
+    if project:
         clockout()
     
     clockin_time = parse_date(args.time) if args.time else datetime.datetime.now()
@@ -138,10 +140,18 @@ def clockout(args=None):
     
     clockout_time = parse_date(args.time) if args.time else datetime.datetime.now()
     
-    print 'Clocked out of %s at %s' % (clocked_in_project(), 
-                                       clockout_time.strftime(user_date_format))
+    project, clockin_time = clocked_in_info()
     
-    log('clockout %s\n' % (clockout_time.strftime(file_date_format)))
+    if project:
+        if clockout_time >= clockin_time:
+            log('clockout %s\n' % (clockout_time.strftime(file_date_format)))
+        
+            print 'Clocked out of %s at %s' % (project, 
+                                               clockout_time.strftime(user_date_format))
+        else:
+            print 'Clockout time is before last clockin time. Clockout failed.'
+    else:
+        print 'Not clocked into anything. Clockout failed.'
 
 @command('tally')
 def tally(args):
