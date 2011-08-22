@@ -1,4 +1,4 @@
-#!/usr/local/bin/python
+#!/usr/bin/python
 
 import argparse
 import datetime
@@ -62,6 +62,8 @@ def clocked_in_info():
         if 'clockin' in last_line:
             project, date_string = last_line.split(' clockin ')
             return project, parse_date_from_file(date_string)
+        else:
+            return None, None
     else:
         return None, None
 
