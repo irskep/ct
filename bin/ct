@@ -1,0 +1,12 @@
+#!/usr/bin/python2.7
+
+import sys
+
+from companytime import main
+
+if __name__ == "__main__":
+    # Add our directory to the system path so we can import modules in our current directory
+    sys.path.insert(0, ".")
+
+    # Start the program
+    main() 

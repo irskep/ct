@@ -1,5 +1,6 @@
 *.pyc
 *.pyo
+*.swp
 .ctconfig
 env/
 ctc

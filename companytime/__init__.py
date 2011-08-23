@@ -1,5 +1,3 @@
-#!/usr/local/bin/python
-
 import argparse
 import datetime
 import os
@@ -223,11 +221,14 @@ def tally(args):
     if from_time or to_time != now:
         print "Periods are only counted if their start and end times are within \n    the given range."
 
-if __name__ == '__main__':
+def main():
     parser = argparse.ArgumentParser(prog='ct',
-                                     description='Git-based time tracking tool')
+                                     description='Time tracking tool')
     parser.add_argument('command', type=str, action='store',
                         choices=commands.keys(),
                         help='init, clockin, or clockout')
     args = parser.parse_args(sys.argv[1:2])
     commands[args.command](sys.argv[2:])
+
+if __name__ == '__main__':
+    main()
