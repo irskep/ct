@@ -12,9 +12,12 @@ logging.basicConfig(level=logging.INFO, format="%(message)s")
 log = logging.getLogger('companytime.main')
 
 def main():
-    if 'CT_HOME' not in os.environ:
-        log.error('Create a working directory (e.g. ~/.ct) and point $CT_HOME at it.')
-        sys.exit(1)
+    home_ct = os.path.join(os.environ['HOME'], '.ct')
+    if 'CT_HOME' not in os.environ or not os.path.isdir(os.environ['CT_HOME']):
+        if not os.path.isdir(home_ct):
+            log.info('Creating ~/.ct')
+            os.mkdir(home_ct)
+        os.environ['CT_HOME'] = os.path.join(os.environ['HOME'], '.ct')
 
     parser = argparse.ArgumentParser(prog='ct',
                                      description='Time tracking tool')
