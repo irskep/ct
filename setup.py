@@ -13,7 +13,7 @@ setup(
         "Operating System :: OS Independent",
     ],
     packages=["companytime"],
-    requires=["dateutil (>=2.0)"],
+    requires=["dateutil (==1.5)"],
     scripts=['bin/ct'],
     long_description="""companytime - a time tracking tool
 """

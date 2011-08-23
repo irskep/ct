@@ -1,143 +1,171 @@
 #!/usr/bin/python
 
-import argparse
+from argparse import ArgumentParser
+from collections import defaultdict
 import datetime
+import logging
 import os
-import sys
 
 from dateutil.parser import parse as parse_date
 
-from companytime.util import all_files, clocked_in_info, hours_and_minutes_from_seconds, now, parse_clockin, parse_clockout, parse_date_range_args, sanitize
+from companytime.util import all_files, file_for_current_user, hours_and_minutes_from_seconds, init, now, parse_clockin, parse_clockout, parse_date_range_args, writeln, write_clockin, write_clockout
 
-config_file_name = '.ctconfig'
-file_date_format = '%m-%d-%Y %H:%M:%S'
 user_date_format = '%I:%M %p on %b %d, %Y'
+
+log = logging.getLogger('companytime.commands')
+
 
 commands = {}
 
 def command(name):
     """Declare a command"""
-    def dec(func):
-        commands[name] = func
-        return func
+    def dec(cls):
+        commands[name] = cls()
+        return cls
     return dec
 
-@command('init')
-def init(args=None):
-    args = args or []
-    parser = argparse.ArgumentParser(prog='ct init',
-                                     description='Start tracking time in an empty repository')
-    args = parser.parse_args(args)
 
-    try:
-        name = sanitize(raw_input('Your name in filesystem-legal characters:\n'))
-    except EOFError:
-        if os.path.exists(config_file_name):
-            print 'Keeping old config'
-            return
+class Command(object):
+
+    description = '???'
+
+    def clocked_in_info(self):
+        """Return (project, date) if a user is configured and the last action was a
+        clockin, otherwise (None, None)
+        """
+        f = file_for_current_user()
+        if f:
+            last_line = f.readlines()[-1]
+            if 'clockin' in last_line:
+                return parse_clockin(last_line)
+            else:
+                return None, None
         else:
-            print 'Exiting'
-            sys.exit(0)
+            return None, None
 
-    try:
-        os.remove(config_file_name)
-    except OSError:
-        pass    # Doesn't matter
 
-    with open(config_file_name, 'w') as f:
-        f.write('name: %s\n' % name)
+@command('clockin')
+class ClockinCommand(Command):
 
-    print 'Created config file'
+    description = 'Start logging hours to a project'
 
-@command ('clockin')
-def clockin(args):
-    parser = argparse.ArgumentParser(prog='ct clockin',
-                                     description='Start logging hours to a project')
-    parser.add_argument('project', type=str, action='store',  nargs='+')
-    parser.add_argument('-t', '--time', type=str, action='store', default=None,
-                        help='Time to log for checkin')
+    def add_arguments(self, parser):
+        parser.add_argument('project', type=str, 
+                            action='store',  nargs='+')
 
-    args = parser.parse_args(args)
-    proj = ' '.join(args.project)
+        parser.add_argument('-t', '--time', type=unicode, dest='time',
+                            action='store', default=None,
+                            help='Time to log for checkin')
 
-    project, clockin_time = clocked_in_info()
-    if project:
-        clockout()
+    def execute(self, args):
+        proj = ' '.join(args.project)
 
-    clockin_time = parse_date(args.time) if args.time else now
+        project, clockin_time = self.clocked_in_info()
+        if project:
+            commands['clockout'].execute(args)
 
-    log('%s clockin %s\n' % (proj, clockin_time.strftime(file_date_format)))
+        clockin_time = parse_date(args.time) if args.time else now
 
-    print 'Clocked into %s at %s' % (proj,
-                                     clockin_time.strftime(user_date_format))
+        write_clockin(proj, clockin_time)
 
-@command ('clockout')
-def clockout(args=None):
-    args = args or []
-    parser = argparse.ArgumentParser(prog='ct clockout',
-                                     description='Stop logging hours to a project')
-    parser.add_argument('-t', '--time', type=str, action='store', default=None,
-                        help='Time to log for checkin')
+        log.info('Clocked into %s at %s' % (
+            proj, clockin_time.strftime(user_date_format)))
 
-    args = parser.parse_args(args)
 
-    clockout_time = parse_date(args.time) if args.time else now
+@command('clockout')
+class ClockoutCommand(Command):
+    
+    description = 'Stop logging hours to a project'
 
-    project, clockin_time = clocked_in_info()
+    def add_arguments(self, parser):
+        parser.add_argument('-t', '--time', type=unicode, action='store',
+                            default=None, dest='time',
+                            help='Time to log for checkin')
 
-    if project:
-        if clockout_time >= clockin_time:
-            log('clockout %s\n' % (clockout_time.strftime(file_date_format)))
+    def execute(self, args):
+        clockout_time = parse_date(args.time) if args.time else now
 
-            print 'Clocked out of %s at %s' % (project, 
-                                               clockout_time.strftime(user_date_format))
+        project, clockin_time = self.clocked_in_info()
+
+        if project:
+            if clockout_time >= clockin_time:
+                write_clockout(clockout_time)
+
+                log.info('Clocked out of %s at %s' % (
+                    project, clockout_time.strftime(user_date_format)))
+            else:
+                log.info('Clockout time is before last clockin time. Clockout failed.')
         else:
-            print 'Clockout time is before last clockin time. Clockout failed.'
-    else:
-        print 'Not clocked into anything. Clockout failed.'
+            log.info('Not clocked into anything. Clockout failed.')
+
 
 @command('summary')
-def summary(args):
-    parser = argparse.ArgumentParser(prog='ct summary',
-                                     description='Count hours spent on a project')
-    parser.add_argument('project', type=str, action='store',  nargs='*')
-    parser.add_argument('-m', '--more_projects', type=str, action='store', nargs='+',
-                        default=[])
-    parser.add_argument('-f', dest='tfrom', type=str, action='store', default=None,
-                        help='When to start counting')
-    parser.add_argument('-t', dest='tto', type=str, action='store', default=None,
-                        help='When to stop counting')
-    parser.add_argument('-v', '--verbose', action='store_const', const=True, default=False)
+class SummaryCommand(Command):
 
-    args = parser.parse_args(args)
-    proj = ' '.join(args.project)
-    if proj:
-        projects = [proj] + args.more_projects
-    else:
-        projects = args.more_projects
-    if not projects:
-        projects = None
+    description = 'Count hours spent on a project'
 
-    from_time, to_time = parse_date_range_args(args.tfrom, args.tto)
+    def add_arguments(self, parser):
+        parser.add_argument('project', type=str, action='store',  nargs='*')
 
-    total_time = datetime.timedelta()
+        parser.add_argument('-m', '--more-projects', type=str, dest='more_projects',
+                            action='store', nargs='+', default=[])
 
-    for file in all_files('r'):
-        with file as f:
-            lines = f.readlines()
-        i = 0
-        while i < len(lines)-1: # Don't count non-clocked-out sessions
-            line = lines[i].strip()
-            this_proj, clockin_time = parse_clockin(line)
-            clockout_time = parse_clockout(lines[i+1])
-            if this_proj in projects or projects is None:
-                if from_time is None or clockin_time >= from_time:
-                    if clockout_time < to_time:
-                        total_time += clockout_time - clockin_time
-                        if args.verbose:
-                            print "%s - %s" % (clockin_string, clockout_string)
-            i += 2
+        parser.add_argument('-f', dest='tfrom', type=str, action='store',
+                            default=None, help='When to start counting')
 
-    print '%d hours, %d minutes' % hours_and_minutes_from_seconds(total_time.seconds)
+        parser.add_argument('-t', dest='tto', type=str, action='store',
+                            default=None, help='When to stop counting')
 
-    if from_time or to_time != now: print "Periods are only counted if their start and end times are within \n    the given range."
+        parser.add_argument('-v', '--verbose', action='store_const',
+                            const=True, default=False)
+
+    def _format_timedelta(self, timedelta):
+        hours, minutes = hours_and_minutes_from_seconds(timedelta.seconds)
+        min_str = 'minute' if minutes == 1 else 'minutes'
+        if hours == 0:
+            return '%d %s' % (minutes, min_str)
+        else:
+            hour_str = 'hour' if hours == 1 else 'hours'
+            return '%d %s, %d %s' % (hours, hour_str, minutes, min_str)
+
+    def execute(self, args):
+        proj = ' '.join(args.project)
+        if proj:
+            projects = [proj] + args.more_projects
+        else:
+            projects = args.more_projects
+        if not projects:
+            projects = None
+
+        from_time, to_time = parse_date_range_args(args.tfrom, args.tto)
+
+        total_time = datetime.timedelta()
+
+        project_sums = defaultdict(lambda: datetime.timedelta())
+
+        for file in all_files('r'):
+            with file as f:
+                lines = f.readlines()
+            i = 0
+            while i < len(lines)-1: # Don't count non-clocked-out sessions
+                line = lines[i].strip()
+                this_proj, clockin_time = parse_clockin(line)
+                clockout_time = parse_clockout(lines[i+1])
+                if projects is None or this_proj in projects:
+                    if from_time is None or clockin_time >= from_time:
+                        if to_time is None or clockout_time <= to_time:
+                            dt = clockout_time - clockin_time
+                            project_sums[this_proj] += dt
+                            total_time += dt
+                i += 2
+
+        for name in sorted(project_sums.keys()):
+            log.info('%s: %s' % (name, self._format_timedelta(project_sums[name])))
+        
+        if project_sums:
+            log.info('')
+
+        log.info('Total: %s' % self._format_timedelta(total_time))
+
+        if from_time or to_time != now:
+            log.info("Periods are only counted if their start *and* end times are within the given range.")

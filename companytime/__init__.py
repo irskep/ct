@@ -15,13 +15,22 @@ def main():
     if 'CT_HOME' not in os.environ:
         log.error('Create a working directory (e.g. ~/.ct) and point $CT_HOME at it.')
         sys.exit(1)
+
     parser = argparse.ArgumentParser(prog='ct',
                                      description='Time tracking tool')
-    parser.add_argument('command', type=str, action='store',
-                        choices=commands.keys(),
-                        help='init, clockin, or clockout')
-    args = parser.parse_args(sys.argv[1:2])
-    commands[args.command](sys.argv[2:])
+
+    subparsers = parser.add_subparsers(title='subcommands',
+                                       description='valid subcommands',
+                                       help='additional help')
+
+    for name, cmd in commands.viewitems():
+        new_parser = subparsers.add_parser(name,
+                                           description=cmd.description)
+        cmd.add_arguments(new_parser)
+        new_parser.set_defaults(func=cmd.execute)
+
+    args = parser.parse_args()
+    args.func(args)
 
 if __name__ == '__main__':
     main()
