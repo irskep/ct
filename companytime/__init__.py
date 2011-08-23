@@ -178,9 +178,9 @@ def clockout(args=None):
     else:
         print 'Not clocked into anything. Clockout failed.'
 
-@command('tally')
-def tally(args):
-    parser = argparse.ArgumentParser(prog='ct tally',
+@command('summary')
+def summary(args):
+    parser = argparse.ArgumentParser(prog='ct summary',
                                      description='Count hours spent on a project')
     parser.add_argument('project', type=str, action='store',  nargs='*')
     parser.add_argument('-m', '--more_projects', type=str, action='store', nargs='+',
