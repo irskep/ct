@@ -1,3 +1,5 @@
+#!/usr/bin/python
+
 import argparse
 import datetime
 import os
@@ -83,6 +85,8 @@ def clocked_in_info():
         last_line = f.readlines()[-1]
         if 'clockin' in last_line:
             return parse_clockin(last_line)
+        else:
+            return None, None
     else:
         return None, None
 
