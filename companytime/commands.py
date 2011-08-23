@@ -147,10 +147,13 @@ class SummaryCommand(Command):
             with file as f:
                 lines = f.readlines()
             i = 0
-            while i < len(lines)-1: # Don't count non-clocked-out sessions
+            while i < len(lines):
                 line = lines[i].strip()
                 this_proj, clockin_time = parse_clockin(line)
-                clockout_time = parse_clockout(lines[i+1])
+                if i == len(lines)-1:
+                    clockout_time = now
+                else:
+                    clockout_time = parse_clockout(lines[i+1])
                 if projects is None or this_proj in projects:
                     if from_time is None or clockin_time >= from_time:
                         if to_time is None or clockout_time <= to_time:
