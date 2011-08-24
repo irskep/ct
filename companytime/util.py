@@ -3,7 +3,9 @@ import datetime
 import json
 import logging
 import os
+import platform
 import re
+from subprocess import Popen, PIPE
 import sys
 
 from dateutil.parser import parse as parse_date
@@ -30,8 +32,8 @@ def config(mode='r'):
     with open(config_file_path(), mode) as f:
         yield f
 
-def init():
-
+def prompt_name():
+    """Ask the user for his name"""
     def sanitize(name):
         name.replace('/', '_')
         name.replace('\\', '_')
@@ -42,18 +44,44 @@ def init():
     name = ''
     while not name:
         name = sanitize(raw_input('Your name in filesystem-legal characters:\n'))
+    return name
+
+def prompt_location():
+    """Ask the user for his location"""
+    location = ''
+    while not location:
+        location = raw_input('Your current location (e.g. work laptop, basement tower, %s):\n' %
+                             platform.node())
+    return location
+
+def prompt_adium():
+    if platform.system() != 'Darwin':
+        return False
+    adium = '!!!'
+    while adium not in 'YyNn':
+        adium = raw_input('Change Adium status on clockin/clockout (y/n):\n')
+    return adium in 'Yy'
+
+def load_config(reset=False):
+    """Load or create the config file"""
+    if reset or not os.path.exists(config_file_path()):
+        c = {}
+    else:
+        with config() as conf:
+            c = json.load(conf)
+
+    if 'name' not in c or not c['name']:
+        c['name'] = prompt_name()
+    if 'location' not in c or not c['location']:
+        c['location'] = prompt_location()
+    if 'adium' not in c or c['adium'] not in (True, False):
+        c['adium'] = prompt_adium()
+    c['adium'] = c['adium'] and platform.system() == 'Darwin'
 
     with config('w') as conf:
-        json.dump({'name': name}, conf)
+        json.dump(c, conf)
 
-    log.info('Created config file')
-
-def load_config():
-    """Load or create the config file"""
-    if not os.path.exists(config_file_path()):
-        init()
-    with config() as conf:
-        return json.load(conf)
+    return c
 
 ### Parsing ###
 
@@ -97,10 +125,26 @@ def file_for_current_user(mode='r'):
 
 def all_files(mode='r'):
     wd = working_directory()
-    paths = (path for path in os.listdir(wd) if path.endswith('.txt'))
-    return [open(os.path.join(wd, path), mode) for path in paths]
+    return (os.path.join(wd, path) for path in os.listdir(wd)
+            if path.endswith('.txt')
+               and os.path.isdir(path))
 
 def writeln(line):
     """Write a line to the current user's file"""
     with file_for_current_user('a') as f:
         f.write(line)
+
+### Miscellaneous ###
+
+def set_adium_status(new_status, away=False):
+    s = Popen(["ps", "axw"], stdout=PIPE)
+    for line in s.stdout:
+        if 'Adium' in line:
+            away_str = "away" if away else "available"
+            p = Popen(['osascript', '-e',
+                       ('tell app "Adium" to go %(away_str)s with message "%(new_status)s"' %
+                        locals())])
+            p.communicate()
+            return True
+    return False
+

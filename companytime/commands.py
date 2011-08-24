@@ -8,11 +8,13 @@ import os
 
 from dateutil.parser import parse as parse_date
 
-from companytime.util import all_files, file_for_current_user, hours_and_minutes_from_seconds, init, now, parse_clockin, parse_clockout, parse_date_range_args, writeln, write_clockin, write_clockout
+from companytime.util import all_files, file_for_current_user, hours_and_minutes_from_seconds, now, load_config, parse_clockin, parse_clockout, parse_date_range_args, set_adium_status, writeln, write_clockin, write_clockout
 
 user_date_format = '%I:%M %p on %b %d, %Y'
 
 log = logging.getLogger('companytime.commands')
+
+blurb = '\n\nThis message brought to you by ct (github.com/irskep/ct)'
 
 
 commands = {}
@@ -50,26 +52,37 @@ class ClockinCommand(Command):
     description = 'Start logging hours to a project'
 
     def add_arguments(self, parser):
-        parser.add_argument('project', type=str, 
-                            action='store',  nargs='+')
+        parser.add_argument('project', type=str, action='store')
+
+        parser.add_argument('--away', default=False,
+                            action='store_true', dest='away',
+                            help='Set Adium status to Away in addition to changing the message')
 
         parser.add_argument('-t', '--time', type=unicode, dest='time',
                             action='store', default=None,
                             help='Time to log for checkin')
 
     def execute(self, args):
-        proj = ' '.join(args.project)
-
         project, clockin_time = self.clocked_in_info()
         if project:
-            commands['clockout'].execute(args)
+            commands['clockout'].execute(args, allow_adium_update=False)
 
         clockin_time = parse_date(args.time) if args.time else now
 
-        write_clockin(proj, clockin_time)
+        write_clockin(args.project, clockin_time)
 
         log.info('Clocked into %s at %s' % (
-            proj, clockin_time.strftime(user_date_format)))
+            args.project, clockin_time.strftime(user_date_format)))
+
+        conf = load_config()
+        if conf['adium']:
+            time_str = clockin_time.strftime(user_date_format)
+            adium_str = ('At %(location)s working on %(project)s (updated %(time)s).' %
+                         dict(location=conf['location'], project=args.project, time=time_str))
+            if set_adium_status(adium_str + blurb, args.away):
+                log.info('Updated Adium status to: %s' % adium_str)
+            else:
+                log.info("Couldn't update Adium status")
 
 
 @command('clockout')
@@ -78,11 +91,15 @@ class ClockoutCommand(Command):
     description = 'Stop logging hours to a project'
 
     def add_arguments(self, parser):
+        parser.add_argument('--away', default=False,
+                            action='store_true', dest='away',
+                            help='Set Adium status to Away in addition to changing the message')
+
         parser.add_argument('-t', '--time', type=unicode, action='store',
                             default=None, dest='time',
                             help='Time to log for checkin')
 
-    def execute(self, args):
+    def execute(self, args, allow_adium_update=True):
         clockout_time = parse_date(args.time) if args.time else now
 
         project, clockin_time = self.clocked_in_info()
@@ -93,6 +110,17 @@ class ClockoutCommand(Command):
 
                 log.info('Clocked out of %s at %s' % (
                     project, clockout_time.strftime(user_date_format)))
+
+                conf = load_config()
+                if allow_adium_update and conf['adium']:
+                    time_str = clockout_time.strftime(user_date_format)
+                    adium_str = ('Not currently tracking time. Last seen at %(location)s working on %(project)s (updated %(time)s).' %
+                                 dict(location=conf['location'], project=project,
+                                      time=time_str))
+                    if set_adium_status(adium_str + blurb, args.away):
+                        log.info('Updated Adium status to: %s' % adium_str)
+                    else:
+                        log.info("Couldn't update Adium status")
             else:
                 log.info('Clockout time is before last clockin time. Clockout failed.')
         else:
@@ -143,8 +171,8 @@ class SummaryCommand(Command):
 
         project_sums = defaultdict(lambda: datetime.timedelta())
 
-        for file in all_files('r'):
-            with file as f:
+        for file_path in all_files('r'):
+            with open(file_path, 'r') as f:
                 lines = f.readlines()
             i = 0
             while i < len(lines):
