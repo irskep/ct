@@ -80,9 +80,9 @@ class ClockinCommand(Command):
             adium_str = ('At %(location)s working on %(project)s. (updated %(time)s)' %
                          dict(location=conf['location'], project=args.project, time=time_str))
             if set_adium_status(adium_str + blurb, args.away):
-                log.info('updated Adium status to: %s' % adium_str)
+                log.info('Updated Adium status to: %s' % adium_str)
             else:
-                log.info("couldn't update Adium status")
+                log.info("Couldn't update Adium status")
 
 
 @command('clockout')
