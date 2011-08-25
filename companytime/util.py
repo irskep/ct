@@ -123,11 +123,11 @@ def file_for_current_user(mode='r'):
     else:
         return open(path, mode)
 
-def all_files(mode='r'):
+def all_files():
     wd = working_directory()
     return (os.path.join(wd, path) for path in os.listdir(wd)
             if path.endswith('.txt')
-               and os.path.isdir(path))
+               and not os.path.isdir(path))
 
 def writeln(line):
     """Write a line to the current user's file"""

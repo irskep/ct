@@ -171,7 +171,7 @@ class SummaryCommand(Command):
 
         project_sums = defaultdict(lambda: datetime.timedelta())
 
-        for file_path in all_files('r'):
+        for file_path in all_files():
             with open(file_path, 'r') as f:
                 lines = f.readlines()
             i = 0
