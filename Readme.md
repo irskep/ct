@@ -1,7 +1,8 @@
 ct - Company Time
 =================
 
-`ct` is a time tracking tool requiring Python 2.7 and `python-dateutil`.
+`ct` is a time tracking tool requiring Python 2.7 and `python-dateutil`. If you
+are on a Mac, it can update your Adium status with what you are working on.
 
 Workflow
 --------
@@ -24,9 +25,7 @@ Usage: `ct [command]`
     clockout: Stop tracking hours
     summary [project_name]: Count and display hours spent on one or all projects
 
-Optional Arguments
-------------------
-
-You can provide a `-t [time string]` argument to `clockin` and `clockout` to
-use that time instead of the current time. Add `--help` to any command to get
-the full usage of that command.
+The `clockin` and `clockout` commands both take a `--time` argument to specify
+a time other than now. If you have Adium, you can also specify `--away` to have
+your status set to Away instead of Available in addition to having your status
+message updated.

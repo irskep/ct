@@ -56,11 +56,11 @@ class ClockinCommand(Command):
 
         parser.add_argument('--away', default=False,
                             action='store_true', dest='away',
-                            help='Set Adium status to Away in addition to changing the message')
+                            help='set Adium status to Away in addition to changing the message')
 
         parser.add_argument('-t', '--time', type=unicode, dest='time',
                             action='store', default=None,
-                            help='Time to log for checkin')
+                            help='time to log for checkin')
 
     def execute(self, args):
         project, clockin_time = self.clocked_in_info()
@@ -80,9 +80,9 @@ class ClockinCommand(Command):
             adium_str = ('At %(location)s working on %(project)s (updated %(time)s).' %
                          dict(location=conf['location'], project=args.project, time=time_str))
             if set_adium_status(adium_str + blurb, args.away):
-                log.info('Updated Adium status to: %s' % adium_str)
+                log.info('updated Adium status to: %s' % adium_str)
             else:
-                log.info("Couldn't update Adium status")
+                log.info("couldn't update Adium status")
 
 
 @command('clockout')
@@ -93,11 +93,11 @@ class ClockoutCommand(Command):
     def add_arguments(self, parser):
         parser.add_argument('--away', default=False,
                             action='store_true', dest='away',
-                            help='Set Adium status to Away in addition to changing the message')
+                            help='set Adium status to Away in addition to changing the message')
 
         parser.add_argument('-t', '--time', type=unicode, action='store',
                             default=None, dest='time',
-                            help='Time to log for checkin')
+                            help='time to log for checkin')
 
     def execute(self, args, allow_adium_update=True):
         clockout_time = parse_date(args.time) if args.time else now

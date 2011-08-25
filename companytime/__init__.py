@@ -24,18 +24,17 @@ def main():
                                      description='Time tracking tool')
 
     subparsers = parser.add_subparsers(title='subcommands',
-                                       description='valid subcommands',
-                                       help='additional help')
+                                       help='Type "ct [command] --help" for more information.')
 
     for name, cmd in commands.viewitems():
         new_parser = subparsers.add_parser(name, description=cmd.description)
         new_parser.add_argument('--config', default=False, action='store_true',
-                                dest='config', help='Update configuration options')
+                                dest='config', help='update configuration options')
         cmd.add_arguments(new_parser)
         new_parser.set_defaults(func=cmd.execute)
 
     parser.add_argument('--config', default=False, action='store_true',
-                        dest='config', help='Update configuration options')
+                        dest='config', help='update configuration options')
 
     args = parser.parse_args()
     if args.config:

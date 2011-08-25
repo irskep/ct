@@ -147,4 +147,3 @@ def set_adium_status(new_status, away=False):
             p.communicate()
             return True
     return False
-
