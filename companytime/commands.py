@@ -77,7 +77,7 @@ class ClockinCommand(Command):
         conf = load_config()
         if conf['adium']:
             time_str = clockin_time.strftime(user_date_format)
-            adium_str = ('At %(location)s working on %(project)s (updated %(time)s).' %
+            adium_str = ('At %(location)s working on %(project)s. (updated %(time)s)' %
                          dict(location=conf['location'], project=args.project, time=time_str))
             if set_adium_status(adium_str + blurb, args.away):
                 log.info('updated Adium status to: %s' % adium_str)
@@ -114,7 +114,7 @@ class ClockoutCommand(Command):
                 conf = load_config()
                 if allow_adium_update and conf['adium']:
                     time_str = clockout_time.strftime(user_date_format)
-                    adium_str = ('Not currently tracking time. Last seen at %(location)s working on %(project)s (updated %(time)s).' %
+                    adium_str = ('Not currently tracking time. Last seen at %(location)s working on %(project)s. (updated %(time)s)' %
                                  dict(location=conf['location'], project=project,
                                       time=time_str))
                     if set_adium_status(adium_str + blurb, args.away):
