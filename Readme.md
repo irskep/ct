@@ -1,4 +1,4 @@
-ct - Company Time
+ct - Cut Time
 =================
 
 `ct` is a time tracking tool requiring Python 2.7 and `python-dateutil`. If you

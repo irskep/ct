@@ -10,7 +10,7 @@ import sys
 
 from dateutil.parser import parse as parse_date
 
-log = logging.getLogger('companytime.commands')
+log = logging.getLogger('cuttime.commands')
 
 now = datetime.datetime.now()
 

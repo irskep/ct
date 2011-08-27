@@ -5,12 +5,12 @@ import logging
 import os
 import sys
 
-from companytime.commands import commands
-from companytime.util import load_config
+from cuttime.commands import commands
+from cuttime.util import load_config
 
 logging.basicConfig(level=logging.INFO, format="%(message)s")
 
-log = logging.getLogger('companytime.main')
+log = logging.getLogger('cuttime.main')
 
 def main():
     home_ct = os.path.join(os.environ['HOME'], '.ct')

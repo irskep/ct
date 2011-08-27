@@ -8,11 +8,11 @@ import os
 
 from dateutil.parser import parse as parse_date
 
-from companytime.util import all_files, file_for_current_user, hours_and_minutes_from_seconds, now, load_config, parse_clockin, parse_clockout, parse_date_range_args, set_adium_status, writeln, write_clockin, write_clockout
+from cuttime.util import all_files, file_for_current_user, hours_and_minutes_from_seconds, now, load_config, parse_clockin, parse_clockout, parse_date_range_args, set_adium_status, writeln, write_clockin, write_clockout
 
 user_date_format = '%I:%M %p on %b %d, %Y'
 
-log = logging.getLogger('companytime.commands')
+log = logging.getLogger('cuttime.commands')
 
 blurb = '\n\nThis message brought to you by ct (github.com/irskep/ct)'
 

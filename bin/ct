@@ -2,7 +2,7 @@
 
 import sys
 
-from companytime import main
+from cuttime import main
 
 if __name__ == "__main__":
     # Add our directory to the system path so we can import modules in our current directory

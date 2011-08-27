@@ -4,3 +4,4 @@
 .ctconfig
 env/
 ctc
+build/
