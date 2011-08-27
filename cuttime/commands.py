@@ -180,46 +180,103 @@ class SummaryCommand(Command):
 
         from_time, to_time = parse_date_range_args(args.tfrom, args.tto)
 
-        total_time = datetime.timedelta()
-
-        project_sums = defaultdict(lambda: datetime.timedelta())
-
         for file_path in util.all_files():
             print os.path.split(os.path.splitext(file_path)[0])[1]
-            with open(file_path, 'r') as f:
-                lines = f.readlines()
-            i = 0
-            while i < len(lines):
-                line = lines[i].strip()
-                this_proj, clockin_time = parse_clockin(line)
-                if i == len(lines)-1:
-                    clockout_time = now
+
+            from_time, to_time = self.find_file_min_max(file_path,
+                                                        from_time, to_time,
+                                                        projects)
+            min_day = datetime.datetime(year=from_time.year,
+                                        month=from_time.month,
+                                        day=from_time.day)
+
+            project_sums, total_time = self.file_summary(file_path,
+                                                         from_time, to_time,
+                                                         projects)
+
+            for name in sorted(project_sums.keys()):
+                log.info(name)
+
+                # { 2011: {0: [(datetime, timedelta)]}}
+                months = defaultdict(list)
+                for d_day in xrange((to_time-from_time).days+1):
+                    today = min_day + datetime.timedelta(days=d_day)
+                    today_min = max(today, from_time)
+                    today_max = min(today + datetime.timedelta(days=1), to_time)
+                    project_sum, _ = self.file_summary(file_path, today_min, today_max, [name])
+                    timedelta = project_sum[name]
+                    if timedelta > datetime.timedelta(0):
+                        months[(today.year, today.month)].append((today, project_sum[name]))
+
+                if len(months) > 1:
+                    for month_tuple, days in sorted(months.items()):
+                        log.info(days[0][0].strftime('  %B %Y'))
+                        self.print_days(days, 4)
                 else:
-                    clockout_time = parse_clockout(lines[i+1])
+                    self.print_days(years.values()[0], 2)
+
+                log.info('  Total: %s' % self._format_timedelta(project_sums[name]))
+
+            if project_sums:
+                log.info('')
+
+            log.info('Total: %s' % self._format_timedelta(total_time))
+
+    def print_days(self, days, indent=2):
+        for day, timedelta in days:
+            time_str = self._format_timedelta(timedelta)
+            log.info(day.strftime(' '*indent + '%%Y-%%m-%%d: %s' % time_str))
+
+    def find_file_min_max(self, file_path, from_time, to_time, projects):
+        min_datetime = None
+        max_datetime = None
+        with open(file_path, 'r') as f:
+            for line in f:
+                this_proj, clockin_time = parse_clockin(line)
                 if projects is None or this_proj in projects:
+                    if min_datetime is None:
+                        min_datetime = clockin_time
+                    else:
+                        min_datetime = min(min_datetime, clockin_time)
+                    try:
+                        clockout_time = parse_clockout(f.next())
+                    except StopIteration:
+                        clockout_time = now
+                    if max_datetime is None:
+                        max_datetime = clockout_time
+                    else:
+                        max_datetime = max(max_datetime, clockout_time)
+        if None in (min_datetime, max_datetime):
+            return now, now
+        else:
+            return min_datetime, max_datetime
+
+    def file_summary(self, file_path, from_time, to_time, projects):
+        project_sums = defaultdict(lambda: datetime.timedelta())
+        total_time = datetime.timedelta()
+        with open(file_path, 'r') as f:
+            for line in f:
+                this_proj, clockin_time = parse_clockin(line)
+                if projects is None or this_proj in projects:
+                    try:
+                        clockout_time = parse_clockout(f.next())
+                    except StopIteration:
+                        clockout_time = now
                     time_in_range = self.time_in_range(clockin_time, clockout_time,
                                                        from_time, to_time)
                     project_sums[this_proj] += time_in_range
                     total_time += time_in_range
-                i += 2
-
-        for name in sorted(project_sums.keys()):
-            log.info('%s: %s' % (name, self._format_timedelta(project_sums[name])))
-        
-        if project_sums:
-            log.info('')
-
-        log.info('Total: %s' % self._format_timedelta(total_time))
+        return project_sums, total_time
 
     def time_in_range(self, clockin_time, clockout_time, from_time, to_time):
         if from_time is not None:
             if clockout_time <= from_time:
-                return 0
+                return datetime.timedelta(0)
             clockin_time = max(clockin_time, from_time)
 
         if to_time is not None:
             if clockin_time >= to_time:
-                return 0
+                return datetime.timedelta(0)
             clockout_time = min(clockout_time, to_time)
 
         return clockout_time - clockin_time
