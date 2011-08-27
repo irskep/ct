@@ -25,7 +25,7 @@ commands = {}
 def command(name):
     """Declare a command"""
     def dec(cls):
-        commands[name] = cls()
+        commands[name] = cls
         return cls
     return dec
 
@@ -85,7 +85,7 @@ class ClockinCommand(ActionCommand):
     def execute(self, args):
         project, clockin_time = self.clocked_in_info()
         if project:
-            commands['clockout'].execute(args, allow_adium_update=False)
+            commands['clockout']().execute(args, allow_adium_update=False)
 
         clockin_time = parse_date(args.time) if args.time else now
         clockin_project = args.project or last_project()
@@ -137,16 +137,22 @@ class ToggleCommand(ActionCommand):
         project, clockin_time = self.clocked_in_info()
 
         if project:
-            commands['clockout'].execute(args)
+            commands['clockout']().execute(args)
         else:
             args.project = None
-            commands['clockin'].execute(args)
+            commands['clockin']().execute(args)
 
 
 @command('summary')
 class SummaryCommand(Command):
 
     description = 'Count hours spent on a project'
+
+    def __init__(self, *args, **kwargs):
+        super(SummaryCommand, self).__init__(*args, **kwargs)
+        self.format_funcs = dict(pretty=self.print_file_pretty,
+                                 weekly=self.print_file_weekly,
+                                 csv=self.print_file_csv)
 
     def add_arguments(self, parser):
         parser.add_argument('project', type=str, action='store',  nargs='*')
@@ -159,6 +165,9 @@ class SummaryCommand(Command):
 
         parser.add_argument('--to', dest='tto', type=str, action='store',
                             default=None, help='When to stop counting')
+
+        parser.add_argument('--format', dest='format', choices=['pretty', 'weekly', 'csv'],
+                            default='pretty')
 
     def _format_timedelta(self, timedelta):
         hours, minutes = hours_and_minutes_from_seconds(timedelta.seconds)
@@ -183,57 +192,79 @@ class SummaryCommand(Command):
         for file_path in util.all_files():
             print os.path.split(os.path.splitext(file_path)[0])[1]
 
-            from_time, to_time = self.find_file_min_max(file_path,
-                                                        from_time, to_time,
-                                                        projects)
-            min_day = datetime.datetime(year=from_time.year,
-                                        month=from_time.month,
-                                        day=from_time.day)
+            self.format_funcs[args.format](file_path, from_time, to_time, projects)
 
-            project_sums, total_time = self.file_summary(file_path,
-                                                         from_time, to_time,
-                                                         projects)
+    def _daily_times(self, file_path, from_time, to_time, projects):
+        """Yield a (day, timedelta) tuple for each day in {from_time...to_time} with
+        more than zero hours that is billed to one of *projects*
+        """
+        min_day = datetime.datetime(year=from_time.year,
+                                    month=from_time.month,
+                                    day=from_time.day)
+        for d_day in xrange((to_time-from_time).days+1):
+            today = min_day + datetime.timedelta(days=d_day)
+            today_min = max(today, from_time)
+            today_max = min(today + datetime.timedelta(days=1), to_time)
 
-            for name in sorted(project_sums.keys()):
-                log.info(name)
+            project_sums, _ = self.file_summary(file_path, today_min, today_max, projects)
 
-                # { 2011: {0: [(datetime, timedelta)]}}
-                months = defaultdict(list)
-                for d_day in xrange((to_time-from_time).days+1):
-                    today = min_day + datetime.timedelta(days=d_day)
-                    today_min = max(today, from_time)
-                    today_max = min(today + datetime.timedelta(days=1), to_time)
-                    project_sum, _ = self.file_summary(file_path, today_min, today_max, [name])
-                    timedelta = project_sum[name]
-                    if timedelta > datetime.timedelta(0):
-                        months[(today.year, today.month)].append((today, project_sum[name]))
+            timedelta = reduce(datetime.timedelta(0), project_sums.values())
+            if timedelta > datetime.timedelta(0):
+                yield (today, timedelta)
 
-                if len(months) > 1:
-                    for month_tuple, days in sorted(months.items()):
-                        log.info(days[0][0].strftime('  %B %Y'))
-                        self.print_days(days, 4)
-                else:
-                    self.print_days(years.values()[0], 2)
+    def print_file_pretty(self, file_path, from_time, to_time, projects):
+        projects, from_time, to_time = self._file_data(file_path, from_time, to_time, projects)
 
-                log.info('  Total: %s' % self._format_timedelta(project_sums[name]))
+        project_sums, total_time = self.file_summary(file_path,
+                                                     from_time, to_time,
+                                                     projects)
 
-            if project_sums:
-                log.info('')
+        for name in sorted(projects):
+            log.info(name)
 
-            log.info('Total: %s' % self._format_timedelta(total_time))
+            # { 2011: {0: [(datetime, timedelta)]}}
+            months = defaultdict(list)
+            for day, timedelta in self._daily_times(file_path, from_time, to_time, [name]):
+                months[(day.year, day.month)].append((day, timedelta))
+
+            if len(months) > 1:
+                for month_tuple, days in sorted(months.items()):
+                    log.info(days[0][0].strftime('  %B %Y'))
+                    self.print_days(days, 4)
+            else:
+                self.print_days(years.values()[0], 2)
+
+            log.info('  Total: %s' % self._format_timedelta(project_sums[name]))
+
+        if project_sums:
+            log.info('')
+
+        log.info('Total: %s' % self._format_timedelta(total_time))
+
+    def print_file_weekly(self, file_path, from_time, to_time, projects):
+        pass
+
+    def print_file_csv(self, file_path, from_time, to_time, projects):
+        projects, from_time, to_time = self._file_data(file_path, from_time, to_time, projects)
+        for day, timedelta in self._daily_times(file_path, from_time, to_time, projects):
+            hours = timedelta.seconds/3600.0
+            hours = round(hours*4)/4
+            log.info(', '.join((day.strftime('%Y-%m-%d'), '%0.2f' % hours)))
 
     def print_days(self, days, indent=2):
         for day, timedelta in days:
             time_str = self._format_timedelta(timedelta)
             log.info(day.strftime(' '*indent + '%%Y-%%m-%%d: %s' % time_str))
 
-    def find_file_min_max(self, file_path, from_time, to_time, projects):
+    def _file_data(self, file_path, from_time, to_time, projects):
+        scraped_projects = set()
         min_datetime = None
         max_datetime = None
         with open(file_path, 'r') as f:
             for line in f:
                 this_proj, clockin_time = parse_clockin(line)
                 if projects is None or this_proj in projects:
+                    scraped_projects.add(this_proj)
                     if min_datetime is None:
                         min_datetime = clockin_time
                     else:
@@ -247,9 +278,9 @@ class SummaryCommand(Command):
                     else:
                         max_datetime = max(max_datetime, clockout_time)
         if None in (min_datetime, max_datetime):
-            return now, now
+            return scraped_projects, now, now
         else:
-            return min_datetime, max_datetime
+            return scraped_projects, min_datetime, max_datetime
 
     def file_summary(self, file_path, from_time, to_time, projects):
         project_sums = defaultdict(lambda: datetime.timedelta())

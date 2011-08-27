@@ -27,6 +27,7 @@ def main():
                                        help='Type "ct [command] --help" for more information.')
 
     for name, cmd in commands.viewitems():
+        cmd = cmd()
         new_parser = subparsers.add_parser(name, description=cmd.description)
         new_parser.add_argument('--config', default=False, action='store_true',
                                 dest='config', help='update configuration options')
