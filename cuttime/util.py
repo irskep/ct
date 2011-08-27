@@ -94,6 +94,8 @@ def parse_date_range_args(tfrom, tto):
     return from_time, to_time
 
 def parse_clockin(line):
+    if 'clockin' not in line:
+        return None, None
     project, date_string = line.split(' clockin ', 1)
     return project, parse_date_from_file(date_string)
 
@@ -114,14 +116,16 @@ def hours_and_minutes_from_seconds(s):
 
 ### Files ###
 
+@contextmanager
 def file_for_current_user(mode='r'):
     """Return the file corresponding to the current user"""
     config = load_config()
     path = os.path.join(working_directory(), '%s.txt' % config['name'])
     if mode == 'r' and not os.path.exists(path):
-        return None
+        yield None
     else:
-        return open(path, mode)
+        with open(path, mode) as f:
+            yield f
 
 def all_files():
     wd = working_directory()
@@ -135,6 +139,16 @@ def writeln(line):
         f.write(line)
 
 ### Miscellaneous ###
+
+def last_project():
+    with file_for_current_user() as f:
+        if f:
+            lines = f.readlines()
+            for i in xrange(len(lines)):
+                project, _ = parse_clockin(lines[-i])
+                return project
+    return None
+
 
 def set_adium_status(new_status, away=False):
     s = Popen(["ps", "axw"], stdout=PIPE)

@@ -5,10 +5,12 @@ from collections import defaultdict
 import datetime
 import logging
 import os
+import sys
 
 from dateutil.parser import parse as parse_date
 
-from cuttime.util import all_files, file_for_current_user, hours_and_minutes_from_seconds, now, load_config, parse_clockin, parse_clockout, parse_date_range_args, set_adium_status, writeln, write_clockin, write_clockout
+from cuttime import util
+from cuttime.util import file_for_current_user, hours_and_minutes_from_seconds, last_project, load_config, now, parse_clockin, parse_clockout, parse_date_range_args, set_adium_status, writeln, write_clockin, write_clockout
 
 user_date_format = '%I:%M %p on %b %d, %Y'
 
@@ -35,25 +37,20 @@ class Command(object):
         """Return (project, date) if a user is configured and the last action was a
         clockin, otherwise (None, None)
         """
-        f = file_for_current_user()
-        if f:
-            last_line = f.readlines()[-1]
-            if 'clockin' in last_line:
-                return parse_clockin(last_line)
+        with file_for_current_user() as f:
+            if f:
+                last_line = f.readlines()[-1]
+                if 'clockin' in last_line:
+                    return parse_clockin(last_line)
+                else:
+                    return None, None
             else:
                 return None, None
-        else:
-            return None, None
 
 
-@command('clockin')
-class ClockinCommand(Command):
-
-    description = 'Start logging hours to a project'
+class ActionCommand(Command):
 
     def add_arguments(self, parser):
-        parser.add_argument('project', type=str, action='store')
-
         parser.add_argument('--away', default=False,
                             action='store_true', dest='away',
                             help='set Adium status to Away in addition to changing the message')
@@ -62,23 +59,38 @@ class ClockinCommand(Command):
                             action='store', default=None,
                             help='time to log for checkin')
 
+
+@command('clockin')
+class ClockinCommand(ActionCommand):
+
+    description = 'Start logging hours to a project'
+
+    def add_arguments(self, parser):
+        parser.add_argument('project', type=str, action='store', default=None, nargs='?')
+        super(ClockinCommand, self).add_arguments(parser)
+
     def execute(self, args):
         project, clockin_time = self.clocked_in_info()
         if project:
             commands['clockout'].execute(args, allow_adium_update=False)
 
         clockin_time = parse_date(args.time) if args.time else now
+        clockin_project = args.project or last_project()
+        if not clockin_project:
+            log.error('You must specify a project for your first clockin.')
+            sys.exit(1)
 
-        write_clockin(args.project, clockin_time)
+        write_clockin(clockin_project, clockin_time)
 
         log.info('Clocked into %s at %s' % (
-            args.project, clockin_time.strftime(user_date_format)))
+            clockin_project, clockin_time.strftime(user_date_format)))
 
         conf = load_config()
         if conf['adium']:
             time_str = clockin_time.strftime(user_date_format)
             adium_str = ('At %(location)s working on %(project)s. (updated %(time)s)' %
-                         dict(location=conf['location'], project=args.project, time=time_str))
+                         dict(location=conf['location'], project=clockin_project,
+                              time=time_str))
             if set_adium_status(adium_str + blurb, args.away):
                 log.info('Updated Adium status to: %s' % adium_str)
             else:
@@ -89,15 +101,6 @@ class ClockinCommand(Command):
 class ClockoutCommand(Command):
     
     description = 'Stop logging hours to a project'
-
-    def add_arguments(self, parser):
-        parser.add_argument('--away', default=False,
-                            action='store_true', dest='away',
-                            help='set Adium status to Away in addition to changing the message')
-
-        parser.add_argument('-t', '--time', type=unicode, action='store',
-                            default=None, dest='time',
-                            help='time to log for checkin')
 
     def execute(self, args, allow_adium_update=True):
         clockout_time = parse_date(args.time) if args.time else now
@@ -171,7 +174,7 @@ class SummaryCommand(Command):
 
         project_sums = defaultdict(lambda: datetime.timedelta())
 
-        for file_path in all_files():
+        for file_path in util.all_files():
             with open(file_path, 'r') as f:
                 lines = f.readlines()
             i = 0
