@@ -70,6 +70,8 @@ def load_config(reset=False):
         with config() as conf:
             c = json.load(conf)
 
+    original_conf = c.copy()
+
     if 'name' not in c or not c['name']:
         c['name'] = prompt_name()
     if 'location' not in c or not c['location']:
@@ -78,8 +80,9 @@ def load_config(reset=False):
         c['adium'] = prompt_adium()
     c['adium'] = c['adium'] and platform.system() == 'Darwin'
 
-    with config('w') as conf:
-        json.dump(c, conf)
+    if c != original_conf:
+        with config('w') as conf:
+            json.dump(c, conf)
 
     return c
 
@@ -144,9 +147,11 @@ def last_project():
     with file_for_current_user() as f:
         if f:
             lines = f.readlines()
-            for i in xrange(len(lines)):
-                project, _ = parse_clockin(lines[-i])
-                return project
+            lines.reverse()
+            for line in lines:
+                project, _ = parse_clockin(line)
+                if project:
+                    return project
     return None
 
 

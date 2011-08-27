@@ -5,7 +5,6 @@ from collections import defaultdict
 import datetime
 import logging
 import os
-import sys
 
 from dateutil.parser import parse as parse_date
 
@@ -16,6 +15,8 @@ user_date_format = '%I:%M %p on %b %d, %Y'
 
 log = logging.getLogger('cuttime.commands')
 
+adium_clockin_fmt = 'At %(location)s working on %(project)s. (updated %(time)s)'
+adium_clockout_fmt = 'Not currently tracking time. Last seen at %(location)s working on %(project)s. (updated %(time)s)'
 blurb = '\n\nThis message brought to you by ct (github.com/irskep/ct)'
 
 
@@ -90,15 +91,14 @@ class ClockinCommand(ActionCommand):
         clockin_project = args.project or last_project()
         if not clockin_project:
             log.error('You must specify a project for your first clockin.')
-            sys.exit(1)
+            return
 
         write_clockin(clockin_project, clockin_time)
 
         log.info('Clocked into %s at %s' % (
             clockin_project, clockin_time.strftime(user_date_format)))
 
-        self.update_adium('At %(location)s working on %(project)s. (updated %(time)s)',
-                          clockin_project, clockin_time, args.away)
+        self.update_adium(adium_clockin_fmt, clockin_project, clockin_time, args.away)
 
 
 @command('clockout')
@@ -111,20 +111,36 @@ class ClockoutCommand(ActionCommand):
 
         project, clockin_time = self.clocked_in_info()
 
-        if project:
-            if clockout_time >= clockin_time:
-                write_clockout(clockout_time)
-
-                log.info('Clocked out of %s at %s' % (
-                    project, clockout_time.strftime(user_date_format)))
-
-                if allow_adium_update:
-                    self.update_adium('Not currently tracking time. Last seen at %(location)s working on %(project)s. (updated %(time)s)',
-                                      project, clockout_time, args.away)
-            else:
-                log.info('Clockout time is before last clockin time. Clockout failed.')
-        else:
+        if not project:
             log.info('Not clocked into anything. Clockout failed.')
+            return
+
+        if clockout_time < clockin_time:
+            log.info('Clockout time is before last clockin time. Clockout failed.')
+            return
+
+        write_clockout(clockout_time)
+
+        log.info('Clocked out of %s at %s' % (
+            project, clockout_time.strftime(user_date_format)))
+
+        if allow_adium_update:
+            self.update_adium(adium_clockout_fmt, project, clockout_time, args.away)
+
+
+@command('toggle')
+class ToggleCommand(ActionCommand):
+
+    description = 'Clock in or out of the most recent project'
+
+    def execute(self, args):
+        project, clockin_time = self.clocked_in_info()
+
+        if project:
+            commands['clockout'].execute(args)
+        else:
+            args.project = None
+            commands['clockin'].execute(args)
 
 
 @command('summary')
@@ -197,6 +213,3 @@ class SummaryCommand(Command):
             log.info('')
 
         log.info('Total: %s' % self._format_timedelta(total_time))
-
-        if from_time or to_time != now:
-            log.info("Periods are only counted if their start *and* end times are within the given range.")
