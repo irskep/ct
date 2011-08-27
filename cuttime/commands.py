@@ -59,6 +59,18 @@ class ActionCommand(Command):
                             action='store', default=None,
                             help='time to log for checkin')
 
+    def update_adium(self, format_str, project, time, away):
+        conf = load_config()
+        if conf['adium']:
+            time_str = time.strftime(user_date_format)
+            adium_str = (format_str % dict(location=conf['location'],
+                                           project=project,
+                                           time=time_str))
+            if set_adium_status(adium_str + blurb, away):
+                log.info('Updated Adium status to: %s' % adium_str)
+            else:
+                log.info("Couldn't update Adium status")
+
 
 @command('clockin')
 class ClockinCommand(ActionCommand):
@@ -85,20 +97,12 @@ class ClockinCommand(ActionCommand):
         log.info('Clocked into %s at %s' % (
             clockin_project, clockin_time.strftime(user_date_format)))
 
-        conf = load_config()
-        if conf['adium']:
-            time_str = clockin_time.strftime(user_date_format)
-            adium_str = ('At %(location)s working on %(project)s. (updated %(time)s)' %
-                         dict(location=conf['location'], project=clockin_project,
-                              time=time_str))
-            if set_adium_status(adium_str + blurb, args.away):
-                log.info('Updated Adium status to: %s' % adium_str)
-            else:
-                log.info("Couldn't update Adium status")
+        self.update_adium('At %(location)s working on %(project)s. (updated %(time)s)',
+                          clockin_project, clockin_time, args.away)
 
 
 @command('clockout')
-class ClockoutCommand(Command):
+class ClockoutCommand(ActionCommand):
     
     description = 'Stop logging hours to a project'
 
@@ -114,16 +118,9 @@ class ClockoutCommand(Command):
                 log.info('Clocked out of %s at %s' % (
                     project, clockout_time.strftime(user_date_format)))
 
-                conf = load_config()
-                if allow_adium_update and conf['adium']:
-                    time_str = clockout_time.strftime(user_date_format)
-                    adium_str = ('Not currently tracking time. Last seen at %(location)s working on %(project)s. (updated %(time)s)' %
-                                 dict(location=conf['location'], project=project,
-                                      time=time_str))
-                    if set_adium_status(adium_str + blurb, args.away):
-                        log.info('Updated Adium status to: %s' % adium_str)
-                    else:
-                        log.info("Couldn't update Adium status")
+                if allow_adium_update:
+                    self.update_adium('Not currently tracking time. Last seen at %(location)s working on %(project)s. (updated %(time)s)',
+                                      project, clockout_time, args.away)
             else:
                 log.info('Clockout time is before last clockin time. Clockout failed.')
         else:
