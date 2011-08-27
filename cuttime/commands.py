@@ -154,14 +154,11 @@ class SummaryCommand(Command):
         parser.add_argument('-m', '--more-projects', type=str, dest='more_projects',
                             action='store', nargs='+', default=[])
 
-        parser.add_argument('-f', dest='tfrom', type=str, action='store',
+        parser.add_argument('--from', dest='tfrom', type=str, action='store',
                             default=None, help='When to start counting')
 
-        parser.add_argument('-t', dest='tto', type=str, action='store',
+        parser.add_argument('--to', dest='tto', type=str, action='store',
                             default=None, help='When to stop counting')
-
-        parser.add_argument('-v', '--verbose', action='store_const',
-                            const=True, default=False)
 
     def _format_timedelta(self, timedelta):
         hours, minutes = hours_and_minutes_from_seconds(timedelta.seconds)
@@ -188,6 +185,7 @@ class SummaryCommand(Command):
         project_sums = defaultdict(lambda: datetime.timedelta())
 
         for file_path in util.all_files():
+            print os.path.split(os.path.splitext(file_path)[0])[1]
             with open(file_path, 'r') as f:
                 lines = f.readlines()
             i = 0
@@ -199,11 +197,10 @@ class SummaryCommand(Command):
                 else:
                     clockout_time = parse_clockout(lines[i+1])
                 if projects is None or this_proj in projects:
-                    if from_time is None or clockin_time >= from_time:
-                        if to_time is None or clockout_time <= to_time:
-                            dt = clockout_time - clockin_time
-                            project_sums[this_proj] += dt
-                            total_time += dt
+                    time_in_range = self.time_in_range(clockin_time, clockout_time,
+                                                       from_time, to_time)
+                    project_sums[this_proj] += time_in_range
+                    total_time += time_in_range
                 i += 2
 
         for name in sorted(project_sums.keys()):
@@ -213,3 +210,16 @@ class SummaryCommand(Command):
             log.info('')
 
         log.info('Total: %s' % self._format_timedelta(total_time))
+
+    def time_in_range(self, clockin_time, clockout_time, from_time, to_time):
+        if from_time is not None:
+            if clockout_time <= from_time:
+                return 0
+            clockin_time = max(clockin_time, from_time)
+
+        if to_time is not None:
+            if clockin_time >= to_time:
+                return 0
+            clockout_time = min(clockout_time, to_time)
+
+        return clockout_time - clockin_time
