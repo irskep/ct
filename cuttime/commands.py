@@ -1,6 +1,7 @@
 #!/usr/bin/python
 
 from argparse import ArgumentParser
+import calendar
 from collections import defaultdict
 import datetime
 import logging
@@ -155,10 +156,8 @@ class SummaryCommand(Command):
                                  csv=self.print_file_csv)
 
     def add_arguments(self, parser):
-        parser.add_argument('project', type=str, action='store',  nargs='*')
-
-        parser.add_argument('-m', '--more-projects', type=str, dest='more_projects',
-                            action='store', nargs='+', default=[])
+        parser.add_argument('project', type=str,
+                            action='store',  nargs='*')
 
         parser.add_argument('--from', dest='tfrom', type=str, action='store',
                             default=None, help='When to start counting')
@@ -168,6 +167,8 @@ class SummaryCommand(Command):
 
         parser.add_argument('--format', dest='format', choices=['pretty', 'weekly', 'csv'],
                             default='pretty')
+        
+        parser.add_argument('--week', dest='week', default=False, action='store_true')
 
     def _format_timedelta(self, timedelta):
         hours, minutes = hours_and_minutes_from_seconds(timedelta.seconds)
@@ -179,20 +180,22 @@ class SummaryCommand(Command):
             return '%d %s, %d %s' % (hours, hour_str, minutes, min_str)
 
     def execute(self, args):
-        proj = ' '.join(args.project)
-        if proj:
-            projects = [proj] + args.more_projects
-        else:
-            projects = args.more_projects
-        if not projects:
-            projects = None
-
+        projects = args.project or None
         from_time, to_time = parse_date_range_args(args.tfrom, args.tto)
+
+        if args.week:
+            from_time_date = self._week_for_day(now)[0]
+            from_time = datetime.datetime(year=from_time_date.year,
+                                          month=from_time_date.month,
+                                          day=from_time_date.day)
+            format_func = self.print_file_weekly
+        else:
+            format_func = self.format_funcs[args.format]
 
         for file_path in util.all_files():
             print os.path.split(os.path.splitext(file_path)[0])[1]
 
-            self.format_funcs[args.format](file_path, from_time, to_time, projects)
+            format_func(file_path, from_time, to_time, projects)
 
     def _daily_times(self, file_path, from_time, to_time, projects):
         """Yield a (day, timedelta) tuple for each day in {from_time...to_time} with
@@ -211,6 +214,21 @@ class SummaryCommand(Command):
             timedelta = reduce(datetime.timedelta(0), project_sums.values())
             if timedelta > datetime.timedelta(0):
                 yield (today, timedelta)
+
+    def _week_for_day(self, day):
+        cal = calendar.Calendar(datetime.date(year=day.year,
+                                              month=day.month,
+                                              day=1).weekday())
+        weeks = cal.monthdatescalendar(day.year, day.month)
+        for week in weeks:
+            if day.date() in week:
+                return week
+
+    def _seconds_to_hours(self, seconds, round_to_quarters=True):
+        hours = seconds/3600.0
+        if round_to_quarters:
+            hours = round(hours*4)/4
+        return hours
 
     def print_file_pretty(self, file_path, from_time, to_time, projects):
         projects, from_time, to_time = self._file_data(file_path, from_time, to_time, projects)
@@ -242,21 +260,36 @@ class SummaryCommand(Command):
         log.info('Total: %s' % self._format_timedelta(total_time))
 
     def print_file_weekly(self, file_path, from_time, to_time, projects):
-        pass
+        projects, from_time, to_time = self._file_data(file_path, from_time, to_time, projects)
+        current_week = None
+        for day, timedelta in self._daily_times(file_path, from_time, to_time, projects):
+            if current_week is None or day.date() not in current_week:
+                if current_week:
+                    log.info('')
+                current_week = self._week_for_day(day)
+                log.info('%s to %s' %
+                         (current_week[0].strftime('%Y-%m-%d'),
+                          current_week[-1].strftime('%Y-%m-%d')))
+            log.info('  %s: %0.2f' % ((day.strftime('%a'),
+                                       self._seconds_to_hours(timedelta.seconds))))
+            
 
     def print_file_csv(self, file_path, from_time, to_time, projects):
         projects, from_time, to_time = self._file_data(file_path, from_time, to_time, projects)
         for day, timedelta in self._daily_times(file_path, from_time, to_time, projects):
-            hours = timedelta.seconds/3600.0
-            hours = round(hours*4)/4
-            log.info(', '.join((day.strftime('%Y-%m-%d'), '%0.2f' % hours)))
+            log.info(', '.join((day.strftime('%Y-%m-%d'),
+                                '%0.2f' % self._seconds_to_hours(timedelta.seconds))))
 
     def print_days(self, days, indent=2):
         for day, timedelta in days:
             time_str = self._format_timedelta(timedelta)
             log.info(day.strftime(' '*indent + '%%Y-%%m-%%d: %s' % time_str))
 
-    def _file_data(self, file_path, from_time, to_time, projects):
+    def _file_data(self, file_path, from_time=None, to_time=None, projects=None):
+        """Given a file and user-supplied parameters, return (projects, from_time, to_time),
+        where projects is a set, and from_time and to_time are datetime objects. No return
+        value will be None.
+        """
         scraped_projects = set()
         min_datetime = None
         max_datetime = None
@@ -265,22 +298,30 @@ class SummaryCommand(Command):
                 this_proj, clockin_time = parse_clockin(line)
                 if projects is None or this_proj in projects:
                     scraped_projects.add(this_proj)
+
                     if min_datetime is None:
                         min_datetime = clockin_time
                     else:
                         min_datetime = min(min_datetime, clockin_time)
+
                     try:
                         clockout_time = parse_clockout(f.next())
                     except StopIteration:
                         clockout_time = now
+
                     if max_datetime is None:
                         max_datetime = clockout_time
                     else:
                         max_datetime = max(max_datetime, clockout_time)
         if None in (min_datetime, max_datetime):
-            return scraped_projects, now, now
+            new_from, new_to = now, now
         else:
-            return scraped_projects, min_datetime, max_datetime
+            new_from, new_to = min_datetime, max_datetime
+        if from_time is None or new_from > from_time:
+            from_time = new_from
+        if to_time is None or new_to < to_time:
+            to_time = new_to
+        return scraped_projects, from_time, to_time
 
     def file_summary(self, file_path, from_time, to_time, projects):
         project_sums = defaultdict(lambda: datetime.timedelta())
