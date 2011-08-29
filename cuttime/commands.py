@@ -211,7 +211,7 @@ class SummaryCommand(Command):
 
             project_sums, _ = self.file_summary(file_path, today_min, today_max, projects)
 
-            timedelta = reduce(datetime.timedelta(0), project_sums.values())
+            timedelta = reduce(lambda a, b: a+b, project_sums.values(), datetime.timedelta(0))
             if timedelta > datetime.timedelta(0):
                 yield (today, timedelta)
 
@@ -250,7 +250,7 @@ class SummaryCommand(Command):
                     log.info(days[0][0].strftime('  %B %Y'))
                     self.print_days(days, 4)
             else:
-                self.print_days(years.values()[0], 2)
+                self.print_days(months.values()[0], 2)
 
             log.info('  Total: %s' % self._format_timedelta(project_sums[name]))
 
