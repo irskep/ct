@@ -5,6 +5,7 @@ import calendar
 from collections import defaultdict
 import datetime
 import logging
+from math import ceil
 import os
 
 from dateutil.parser import parse as parse_date
@@ -204,7 +205,9 @@ class SummaryCommand(Command):
         min_day = datetime.datetime(year=from_time.year,
                                     month=from_time.month,
                                     day=from_time.day)
-        for d_day in xrange((to_time-from_time).days+1):
+        delta = to_time - from_time
+        num_days = delta.days + int(ceil(delta.seconds/float(24*60*60)))
+        for d_day in xrange(num_days + 1):
             today = min_day + datetime.timedelta(days=d_day)
             today_min = max(today, from_time)
             today_max = min(today + datetime.timedelta(days=1), to_time)
