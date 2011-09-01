@@ -111,10 +111,12 @@ def write_clockin(project, time):
 def write_clockout(time):
     writeln('clockout %s\n' % (time.strftime(file_date_format)))
 
-def hours_and_minutes_from_seconds(s):
+def hours_and_minutes(timedelta):
+    s = timedelta.seconds
     hours = s // 3600
     s -= hours * 3600
     minutes = s // 60
+    hours += timedelta.days * 24
     return hours, minutes
 
 ### Files ###

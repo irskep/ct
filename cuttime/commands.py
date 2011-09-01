@@ -11,7 +11,7 @@ import os
 from dateutil.parser import parse as parse_date
 
 from cuttime import util
-from cuttime.util import file_for_current_user, hours_and_minutes_from_seconds, last_project, load_config, now, parse_clockin, parse_clockout, parse_date_range_args, set_adium_status, writeln, write_clockin, write_clockout
+from cuttime.util import file_for_current_user, hours_and_minutes, last_project, load_config, now, parse_clockin, parse_clockout, parse_date_range_args, set_adium_status, writeln, write_clockin, write_clockout
 
 user_date_format = '%I:%M %p on %b %d, %Y'
 
@@ -172,7 +172,7 @@ class SummaryCommand(Command):
         parser.add_argument('--week', dest='week', default=False, action='store_true')
 
     def _format_timedelta(self, timedelta):
-        hours, minutes = hours_and_minutes_from_seconds(timedelta.seconds)
+        hours, minutes = hours_and_minutes(timedelta)
         min_str = 'minute' if minutes == 1 else 'minutes'
         if hours == 0:
             return '%d %s' % (minutes, min_str)
@@ -186,6 +186,7 @@ class SummaryCommand(Command):
 
         if args.week:
             from_time_date = self._week_for_day(now)[0]
+            print from_time_date
             from_time = datetime.datetime(year=from_time_date.year,
                                           month=from_time_date.month,
                                           day=from_time_date.day)
@@ -219,16 +220,15 @@ class SummaryCommand(Command):
                 yield (today, timedelta)
 
     def _week_for_day(self, day):
-        cal = calendar.Calendar(datetime.date(year=day.year,
-                                              month=day.month,
-                                              day=1).weekday())
-        weeks = cal.monthdatescalendar(day.year, day.month)
+        weeks = calendar.Calendar().monthdatescalendar(day.year, day.month)
         for week in weeks:
+            # calendar module starts weeks at Monday, we want Sunday
+            week = [week[0] - datetime.timedelta(days=1)] + week[0:-1]
             if day.date() in week:
                 return week
 
-    def _seconds_to_hours(self, seconds, round_to_quarters=True):
-        hours = seconds/3600.0
+    def _timedelta_to_hours(self, timedelta, round_to_quarters=True):
+        hours = timedelta.days*24 + timedelta.seconds/3600.0
         if round_to_quarters:
             hours = round(hours*4)/4
         return hours
@@ -265,23 +265,31 @@ class SummaryCommand(Command):
     def print_file_weekly(self, file_path, from_time, to_time, projects):
         projects, from_time, to_time = self._file_data(file_path, from_time, to_time, projects)
         current_week = None
+        weekly_total = datetime.timedelta()
         for day, timedelta in self._daily_times(file_path, from_time, to_time, projects):
             if current_week is None or day.date() not in current_week:
                 if current_week:
-                    log.info('')
+                    log.info('Total: %0.2f\n' %
+                             self._timedelta_to_hours(weekly_total))
+                    weekly_total = datetime.timedelta()
                 current_week = self._week_for_day(day)
                 log.info('%s to %s' %
                          (current_week[0].strftime('%Y-%m-%d'),
                           current_week[-1].strftime('%Y-%m-%d')))
             log.info('  %s: %0.2f' % ((day.strftime('%a'),
-                                       self._seconds_to_hours(timedelta.seconds))))
+                                       self._timedelta_to_hours(timedelta))))
+            weekly_total += timedelta
+        if current_week:
+            log.info('Total: %0.2f' %
+                     self._timedelta_to_hours(weekly_total))
+            weekly_total = datetime.timedelta()
             
 
     def print_file_csv(self, file_path, from_time, to_time, projects):
         projects, from_time, to_time = self._file_data(file_path, from_time, to_time, projects)
         for day, timedelta in self._daily_times(file_path, from_time, to_time, projects):
             log.info(', '.join((day.strftime('%Y-%m-%d'),
-                                '%0.2f' % self._seconds_to_hours(timedelta.seconds))))
+                                '%0.2f' % self._timedelta_to_hours(timedelta))))
 
     def print_days(self, days, indent=2):
         for day, timedelta in days:
