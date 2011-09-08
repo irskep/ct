@@ -105,7 +105,7 @@ class ClockinCommand(ActionCommand):
 
 @command('clockout')
 class ClockoutCommand(ActionCommand):
-    
+
     description = 'Stop logging hours to a project'
 
     def execute(self, args, allow_adium_update=True):
@@ -154,7 +154,8 @@ class SummaryCommand(Command):
         super(SummaryCommand, self).__init__(*args, **kwargs)
         self.format_funcs = dict(pretty=self.print_file_pretty,
                                  weekly=self.print_file_weekly,
-                                 csv=self.print_file_csv)
+                                 csv=self.print_file_csv,
+                                 tsv=self.print_file_tsv)
 
     def add_arguments(self, parser):
         parser.add_argument('project', type=str,
@@ -166,7 +167,7 @@ class SummaryCommand(Command):
         parser.add_argument('--to', dest='tto', type=str, action='store',
                             default=None, help='When to stop counting')
 
-        parser.add_argument('--format', dest='format', choices=['pretty', 'weekly', 'csv'],
+        parser.add_argument('--format', dest='format', choices=sorted(self.format_funcs.keys()),
                             default='pretty')
         
         parser.add_argument('--week', dest='week', default=False, action='store_true')
@@ -283,12 +284,17 @@ class SummaryCommand(Command):
             log.info('Total: %0.2f' %
                      self._timedelta_to_hours(weekly_total))
             weekly_total = datetime.timedelta()
-            
 
     def print_file_csv(self, file_path, from_time, to_time, projects):
+        self.print_file_sep(',', file_path, from_time, to_time, projects)
+
+    def print_file_tsv(self, file_path, from_time, to_time, projects):
+        self.print_file_sep('\t', file_path, from_time, to_time, projects)
+
+    def print_file_sep(self, sep, file_path, from_time, to_time, projects):
         projects, from_time, to_time = self._file_data(file_path, from_time, to_time, projects)
         for day, timedelta in self._daily_times(file_path, from_time, to_time, projects):
-            log.info(', '.join((day.strftime('%Y-%m-%d'),
+            log.info(sep.join((day.strftime('%Y-%m-%d'),
                                 '%0.2f' % self._timedelta_to_hours(timedelta))))
 
     def print_days(self, days, indent=2):
