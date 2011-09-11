@@ -1,5 +1,6 @@
 #!/usr/bin/python
 
+from abc import ABCMeta, abstractmethod
 from argparse import ArgumentParser
 import calendar
 from collections import defaultdict
@@ -34,7 +35,17 @@ def command(name):
 
 class Command(object):
 
+    __metaclass__ = ABCMeta
+
     description = '???'
+
+    @abstractmethod
+    def add_arguments(self, parser):
+        pass
+
+    @abstractmethod
+    def execute(self, args):
+        pass
 
     def clocked_in_info(self):
         """Return (project, date) if a user is configured and the last action was a
