@@ -5,12 +5,13 @@ import calendar
 from collections import defaultdict
 import datetime
 import logging
+from math import ceil
 import os
 
 from dateutil.parser import parse as parse_date
 
 from cuttime import util
-from cuttime.util import file_for_current_user, hours_and_minutes_from_seconds, last_project, load_config, now, parse_clockin, parse_clockout, parse_date_range_args, set_adium_status, writeln, write_clockin, write_clockout
+from cuttime.util import file_for_current_user, hours_and_minutes, last_project, load_config, now, parse_clockin, parse_clockout, parse_date_range_args, set_adium_status, writeln, write_clockin, write_clockout
 
 user_date_format = '%I:%M %p on %b %d, %Y'
 
@@ -153,7 +154,8 @@ class SummaryCommand(Command):
         super(SummaryCommand, self).__init__(*args, **kwargs)
         self.format_funcs = dict(pretty=self.print_file_pretty,
                                  weekly=self.print_file_weekly,
-                                 csv=self.print_file_csv)
+                                 csv=self.print_file_csv,
+                                 tsv=self.print_file_tsv)
 
     def add_arguments(self, parser):
         parser.add_argument('project', type=str,
@@ -165,13 +167,13 @@ class SummaryCommand(Command):
         parser.add_argument('--to', dest='tto', type=str, action='store',
                             default=None, help='When to stop counting')
 
-        parser.add_argument('--format', dest='format', choices=['pretty', 'weekly', 'csv'],
+        parser.add_argument('--format', dest='format', choices=sorted(self.format_funcs.keys()),
                             default='pretty')
 
         parser.add_argument('--week', dest='week', default=False, action='store_true')
 
     def _format_timedelta(self, timedelta):
-        hours, minutes = hours_and_minutes_from_seconds(timedelta.seconds)
+        hours, minutes = hours_and_minutes(timedelta)
         min_str = 'minute' if minutes == 1 else 'minutes'
         if hours == 0:
             return '%d %s' % (minutes, min_str)
@@ -185,6 +187,7 @@ class SummaryCommand(Command):
 
         if args.week:
             from_time_date = self._week_for_day(now)[0]
+            print from_time_date
             from_time = datetime.datetime(year=from_time_date.year,
                                           month=from_time_date.month,
                                           day=from_time_date.day)
@@ -204,28 +207,29 @@ class SummaryCommand(Command):
         min_day = datetime.datetime(year=from_time.year,
                                     month=from_time.month,
                                     day=from_time.day)
-        for d_day in xrange((to_time-from_time).days+1):
+        delta = to_time - from_time
+        num_days = delta.days + int(ceil(delta.seconds/float(24*60*60)))
+        for d_day in xrange(num_days + 1):
             today = min_day + datetime.timedelta(days=d_day)
             today_min = max(today, from_time)
             today_max = min(today + datetime.timedelta(days=1), to_time)
 
             project_sums, _ = self.file_summary(file_path, today_min, today_max, projects)
 
-            timedelta = reduce(datetime.timedelta(0), project_sums.values())
+            timedelta = reduce(lambda a, b: a+b, project_sums.values(), datetime.timedelta(0))
             if timedelta > datetime.timedelta(0):
                 yield (today, timedelta)
 
     def _week_for_day(self, day):
-        cal = calendar.Calendar(datetime.date(year=day.year,
-                                              month=day.month,
-                                              day=1).weekday())
-        weeks = cal.monthdatescalendar(day.year, day.month)
+        weeks = calendar.Calendar().monthdatescalendar(day.year, day.month)
         for week in weeks:
+            # calendar module starts weeks at Monday, we want Sunday
+            week = [week[0] - datetime.timedelta(days=1)] + week[0:-1]
             if day.date() in week:
                 return week
 
-    def _seconds_to_hours(self, seconds, round_to_quarters=True):
-        hours = seconds/3600.0
+    def _timedelta_to_hours(self, timedelta, round_to_quarters=True):
+        hours = timedelta.days*24 + timedelta.seconds/3600.0
         if round_to_quarters:
             hours = round(hours*4)/4
         return hours
@@ -250,7 +254,7 @@ class SummaryCommand(Command):
                     log.info(days[0][0].strftime('  %B %Y'))
                     self.print_days(days, 4)
             else:
-                self.print_days(years.values()[0], 2)
+                self.print_days(months.values()[0], 2)
 
             log.info('  Total: %s' % self._format_timedelta(project_sums[name]))
 
@@ -262,22 +266,36 @@ class SummaryCommand(Command):
     def print_file_weekly(self, file_path, from_time, to_time, projects):
         projects, from_time, to_time = self._file_data(file_path, from_time, to_time, projects)
         current_week = None
+        weekly_total = datetime.timedelta()
         for day, timedelta in self._daily_times(file_path, from_time, to_time, projects):
             if current_week is None or day.date() not in current_week:
                 if current_week:
-                    log.info('')
+                    log.info('Total: %0.2f\n' %
+                             self._timedelta_to_hours(weekly_total))
+                    weekly_total = datetime.timedelta()
                 current_week = self._week_for_day(day)
                 log.info('%s to %s' %
                          (current_week[0].strftime('%Y-%m-%d'),
                           current_week[-1].strftime('%Y-%m-%d')))
             log.info('  %s: %0.2f' % ((day.strftime('%a'),
-                                       self._seconds_to_hours(timedelta.seconds))))
+                                       self._timedelta_to_hours(timedelta))))
+            weekly_total += timedelta
+        if current_week:
+            log.info('Total: %0.2f' %
+                     self._timedelta_to_hours(weekly_total))
+            weekly_total = datetime.timedelta()
 
     def print_file_csv(self, file_path, from_time, to_time, projects):
+        self.print_file_sep(',', file_path, from_time, to_time, projects)
+
+    def print_file_tsv(self, file_path, from_time, to_time, projects):
+        self.print_file_sep('\t', file_path, from_time, to_time, projects)
+
+    def print_file_sep(self, sep, file_path, from_time, to_time, projects):
         projects, from_time, to_time = self._file_data(file_path, from_time, to_time, projects)
         for day, timedelta in self._daily_times(file_path, from_time, to_time, projects):
-            log.info(', '.join((day.strftime('%Y-%m-%d'),
-                                '%0.2f' % self._seconds_to_hours(timedelta.seconds))))
+            log.info(sep.join((day.strftime('%Y-%m-%d'),
+                                '%0.2f' % self._timedelta_to_hours(timedelta))))
 
     def print_days(self, days, indent=2):
         for day, timedelta in days:
