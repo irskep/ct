@@ -104,7 +104,7 @@ class ClockinCommand(ActionCommand):
 
 @command('clockout')
 class ClockoutCommand(ActionCommand):
-    
+
     description = 'Stop logging hours to a project'
 
     def execute(self, args, allow_adium_update=True):
@@ -167,7 +167,7 @@ class SummaryCommand(Command):
 
         parser.add_argument('--format', dest='format', choices=['pretty', 'weekly', 'csv'],
                             default='pretty')
-        
+
         parser.add_argument('--week', dest='week', default=False, action='store_true')
 
     def _format_timedelta(self, timedelta):
@@ -272,7 +272,6 @@ class SummaryCommand(Command):
                           current_week[-1].strftime('%Y-%m-%d')))
             log.info('  %s: %0.2f' % ((day.strftime('%a'),
                                        self._seconds_to_hours(timedelta.seconds))))
-            
 
     def print_file_csv(self, file_path, from_time, to_time, projects):
         projects, from_time, to_time = self._file_data(file_path, from_time, to_time, projects)
